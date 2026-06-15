@@ -1,0 +1,87 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from IPython.display import HTML
+import random
+
+# 1. Pull values from the sliders in Part 1
+Kp = kp_slider.value
+Ki = ki_slider.value
+Kd = kd_slider.value
+max_noise = noise_slider.value
+
+# 2. Simulation Constants
+duration = 15.0
+dt = 0.1
+steps = int(duration / dt)
+setpoint = 10.0
+
+# 3. Physics Simulation
+altitude = 0.0
+velocity = 0.0
+error_prior = 0.0
+integral = 0.0
+history_alt = []
+
+for i in range(steps):
+    time = i * dt
+    error = setpoint - altitude
+    integral += error * dt
+    derivative = (error - error_prior) / dt
+
+    # PID Control
+    control_output = (Kp * error) + (Ki * integral) + (Kd * derivative)
+
+    # Disturbance (starts after 6 seconds)
+    noise = random.uniform(-max_noise, max_noise) if time > 6.0 else 0
+
+    # Physics Engine (Gravity vs Thrust)
+    acceleration = control_output - 9.8 + noise
+    velocity += acceleration * dt
+    altitude += velocity * dt
+
+    if altitude < 0: # Ground hit
+        altitude = 0
+        velocity = 0
+
+    history_alt.append(altitude)
+    error_prior = error
+
+# 4. Create Animation
+fig, ax = plt.subplots(figsize=(5, 7))
+ax.set_xlim(-5, 5)
+ax.set_ylim(0, 20)
+ax.axhline(setpoint, color='red', linestyle='--', label="Target")
+ax.set_title(f"Flight Status\nKp={Kp}, Ki={Ki}, Kd={Kd}")
+ax.set_xticks([])
+
+drone_body, = ax.plot([], [], 'ks', markersize=12)
+prop_line, = ax.plot([], [], 'k-', linewidth=2)
+status_text = ax.text(-4, 18, '', fontsize=10, color='red')
+
+def init():
+    drone_body.set_data([], [])
+    prop_line.set_data([], [])
+    status_text.set_text('')
+    return drone_body, prop_line, status_text
+
+def update(frame):
+    curr_alt = history_alt[frame]
+    time = frame * dt
+
+    # Update Graphics
+    drone_body.set_data([0], [curr_alt])
+    prop_line.set_data([-0.7, 0.7], [curr_alt + 0.1, curr_alt + 0.1])
+
+    # Update Status Text
+    if time > 6.0 and max_noise > 0:
+        status_text.set_text("WIND GUSTS ACTIVE!")
+    else:
+        status_text.set_text("Stable Air")
+
+    return drone_body, prop_line, status_text
+
+ani = FuncAnimation(fig, update, frames=range(0, steps, 2), init_func=init, blit=True, interval=50)
+
+plt.close() # Keep the interface clean
+HTML(ani.to_html5_video())
