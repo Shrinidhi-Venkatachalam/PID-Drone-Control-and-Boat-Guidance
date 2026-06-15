@@ -1,0 +1,71 @@
+import ipywidgets as widgets
+from IPython.display import display, clear_output
+import matplotlib.pyplot as plt
+import numpy as np
+import random
+
+# --- Create Sliders ---
+kp_slider = widgets.FloatSlider(value=1.5, min=0.0, max=10.0, step=0.1, description='Kp (Power):')
+ki_slider = widgets.FloatSlider(value=0.1, min=0.0, max=2.0, step=0.01, description='Ki (Memory):')
+kd_slider = widgets.FloatSlider(value=0.5, min=0.0, max=5.0, step=0.1, description='Kd (Brakes):')
+noise_slider = widgets.FloatSlider(value=2.0, min=0.0, max=10.0, step=0.5, description='Wind Noise:')
+run_button = widgets.Button(description="Run Simulation & Plot", button_style='success')
+output_area = widgets.Output()
+
+def run_sim_and_plot(b):
+    with output_area:
+        clear_output(wait=True)
+
+        # 1. Setup Simulation
+        duration, dt = 15.0, 0.1
+        steps = int(duration / dt)
+        setpoint = 10.0
+
+        # Pull slider values
+        Kp, Ki, Kd = kp_slider.value, ki_slider.value, kd_slider.value
+        max_noise = noise_slider.value
+
+        # 2. Physics Loop
+        alt, vel, error_prior, integral = 0.0, 0.0, 0.0, 0.0
+        history_alt = []
+        history_time = [i * dt for i in range(steps)]
+
+        for i in range(steps):
+            time = i * dt
+            error = setpoint - alt
+            integral += error * dt
+            derivative = (error - error_prior) / dt
+
+            output = (Kp * error) + (Ki * integral) + (Kd * derivative)
+            noise = random.uniform(-max_noise, max_noise) if time > 6.0 else 0
+
+            accel = output - 9.8 + noise
+            vel += accel * dt
+            alt += vel * dt
+
+            if alt < 0: alt, vel = 0, 0
+            history_alt.append(alt)
+            error_prior = error
+
+        # 3. Plotting
+        plt.figure(figsize=(10, 5))
+        plt.plot(history_time, [setpoint]*steps, 'r--', label="Target Setpoint", alpha=0.8)
+        plt.plot(history_time, history_alt, color='#1f77b4', linewidth=2, label="Drone Altitude")
+
+        # Highlight Noise Zone
+        plt.axvspan(6, 15, color='gray', alpha=0.15, label="Disturbance Zone")
+
+        plt.title(f"PID Tuning Results (Kp={Kp}, Ki={Ki}, Kd={Kd})", fontsize=12)
+        plt.xlabel("Time (s)")
+        plt.ylabel("Altitude (m)")
+        plt.ylim(0, max(max(history_alt) + 2, 15))
+        plt.grid(True, linestyle=':', alpha=0.7)
+        plt.legend(loc='lower right')
+        plt.show()
+
+# Connect button to function
+run_button.on_click(run_sim_and_plot)
+
+# Display everything
+print("Adjust the sliders and click the button to see the flight path.")
+display(kp_slider, ki_slider, kd_slider, noise_slider, run_button, output_area)
